@@ -32,10 +32,10 @@ void q_free(struct list_head *l)
         return;
     }
 
-    struct list_head *node = NULL, *safe = NULL;
+    element_t *entry = NULL, *safe = NULL;
 
-    list_for_each_safe (node, safe, l) {
-        free(node);
+    list_for_each_entry_safe (entry, safe, l, list) {
+        q_release_element(entry);
     }
     free(l);
 }
