@@ -32,9 +32,10 @@ void q_free(struct list_head *l)
         return;
     }
 
-    element_t *entry = NULL, *safe = NULL;
+    struct list_head *node, *safe;
 
-    list_for_each_entry_safe (entry, safe, l, list) {
+    list_for_each_safe (node, safe, l) {
+        element_t *entry = list_entry(node, element_t, list);
         q_release_element(entry);
     }
     free(l);
@@ -43,6 +44,17 @@ void q_free(struct list_head *l)
 /* Insert an element at head of queue */
 bool q_insert_head(struct list_head *head, char *s)
 {
+    element_t *new_node = malloc(sizeof(element_t));
+
+    if (!new_node) {
+        return NULL;
+    }
+
+    size_t len = strlen(s) + 1;
+    new_node->value = malloc(sizeof(char) * len);
+    strncpy(new_node->value, s, len);
+    list_add(&new_node->list, head);
+
     return true;
 }
 
