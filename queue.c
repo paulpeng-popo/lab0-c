@@ -209,8 +209,7 @@ void q_reverse(struct list_head *head)
     LIST_HEAD(reverse_list);
     struct list_head *node, *safe;
     list_for_each_safe (node, safe, head) {
-        list_del(node);
-        list_add(node, &reverse_list);
+        list_move(node, &reverse_list);
     }
 
     list_splice(&reverse_list, head);
