@@ -41,7 +41,7 @@ void q_free(struct list_head *l)
 /* Insert an element at head of queue */
 bool q_insert_head(struct list_head *head, char *s)
 {
-    if (!head) {
+    if (!head || !s) {
         return false;
     }
 
@@ -52,6 +52,11 @@ bool q_insert_head(struct list_head *head, char *s)
 
     size_t len = strlen(s) + 1;
     entry->value = malloc(sizeof(char) * len);
+    if (!entry->value) {
+        free(entry);
+        return false;
+    }
+
     strncpy(entry->value, s, len - 1);
     (entry->value)[len - 1] = '\0';
     list_add(&entry->list, head);
@@ -62,7 +67,7 @@ bool q_insert_head(struct list_head *head, char *s)
 /* Insert an element at tail of queue */
 bool q_insert_tail(struct list_head *head, char *s)
 {
-    if (!head) {
+    if (!head || !s) {
         return false;
     }
 
@@ -73,6 +78,11 @@ bool q_insert_tail(struct list_head *head, char *s)
 
     size_t len = strlen(s) + 1;
     entry->value = malloc(sizeof(char) * len);
+    if (!entry->value) {
+        free(entry);
+        return false;
+    }
+
     strncpy(entry->value, s, len - 1);
     (entry->value)[len - 1] = '\0';
     list_add_tail(&entry->list, head);
@@ -159,6 +169,27 @@ bool q_delete_mid(struct list_head *head)
 bool q_delete_dup(struct list_head *head)
 {
     // https://leetcode.com/problems/remove-duplicates-from-sorted-list-ii/
+    // only valid for sorted list
+
+    // empty and singular should do no action
+    if (!head || list_empty(head) || list_is_singular(head)) {
+        return false;
+    }
+
+    bool dup = false;
+    struct list_head *del_list = q_new();
+    element_t *entry, *safe;
+    list_for_each_entry_safe (entry, safe, head, list) {
+        if (&safe->list != head && !strcmp(entry->value, safe->value)) {
+            list_move(&entry->list, del_list);
+            dup = true;
+        } else if (dup) {
+            list_move(&entry->list, del_list);
+            dup = false;
+        }
+    }
+    q_free(del_list);
+
     return true;
 }
 
