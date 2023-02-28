@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,11 +16,9 @@
 struct list_head *q_new()
 {
     struct list_head *head = malloc(sizeof(struct list_head));
-    if (!head) {
-        return NULL;
+    if (head) {
+        INIT_LIST_HEAD(head);
     }
-
-    INIT_LIST_HEAD(head);
     return head;
 }
 
@@ -32,8 +31,7 @@ void q_free(struct list_head *l)
 
     struct list_head *node, *safe;
     list_for_each_safe (node, safe, l) {
-        element_t *entry = list_entry(node, element_t, list);
-        q_release_element(entry);
+        q_release_element(list_entry(node, element_t, list));
     }
     free(l);
 }
@@ -51,13 +49,13 @@ bool q_insert_head(struct list_head *head, char *s)
     }
 
     size_t len = strlen(s) + 1;
-    entry->value = malloc(sizeof(char) * len);
+    entry->value = malloc(len);
     if (!entry->value) {
         free(entry);
         return false;
     }
 
-    strncpy(entry->value, s, len - 1);
+    strncpy(entry->value, s, len);
     (entry->value)[len - 1] = '\0';
     list_add(&entry->list, head);
 
@@ -77,13 +75,13 @@ bool q_insert_tail(struct list_head *head, char *s)
     }
 
     size_t len = strlen(s) + 1;
-    entry->value = malloc(sizeof(char) * len);
+    entry->value = malloc(len);
     if (!entry->value) {
         free(entry);
         return false;
     }
 
-    strncpy(entry->value, s, len - 1);
+    strncpy(entry->value, s, len);
     (entry->value)[len - 1] = '\0';
     list_add_tail(&entry->list, head);
 
@@ -142,6 +140,16 @@ int q_size(struct list_head *head)
     return len;
 }
 
+static void _find_mid(struct list_head **mid, struct list_head *head)
+{
+    *mid = head->next;
+    struct list_head *fast = head->next->next;
+    while (fast != head && fast && fast->next != head && fast->next) {
+        *mid = (*mid)->next;
+        fast = fast->next->next;
+    }
+}
+
 /* Delete the middle node in queue */
 bool q_delete_mid(struct list_head *head)
 {
@@ -150,45 +158,47 @@ bool q_delete_mid(struct list_head *head)
         return false;
     }
 
-    struct list_head *front = head->next;
-    struct list_head *back = head->prev;
-    while (front != back && front->next != back) {
-        front = front->next;
-        back = back->prev;
-    }
+    struct list_head *mid = NULL;
+    _find_mid(&mid, head);
 
-    // delete the node which is pointed by front
-    list_del_init(front);
-    element_t *entry = list_entry(front, element_t, list);
+    // delete the node pointed by mid
+    list_del(mid);
+    element_t *entry = list_entry(mid, element_t, list);
     q_release_element(entry);
 
     return true;
+}
+
+static inline int cmpstr(const void *p1, const void *p2)
+{
+    element_t *first =
+        list_entry(*(const struct list_head **) p1, element_t, list);
+    element_t *second =
+        list_entry(*(const struct list_head **) p2, element_t, list);
+    return strcmp(first->value, second->value);
 }
 
 /* Delete all nodes that have duplicate string */
 bool q_delete_dup(struct list_head *head)
 {
     // https://leetcode.com/problems/remove-duplicates-from-sorted-list-ii/
-    // only valid for sorted list
-
-    // empty and singular should do no action
     if (!head || list_empty(head) || list_is_singular(head)) {
         return false;
     }
 
     bool dup = false;
-    struct list_head *del_list = q_new();
-    element_t *entry, *safe;
-    list_for_each_entry_safe (entry, safe, head, list) {
-        if (&safe->list != head && !strcmp(entry->value, safe->value)) {
-            list_move(&entry->list, del_list);
+    struct list_head *node, *safe;
+    list_for_each_safe (node, safe, head) {
+        if (safe != head && !cmpstr(&node, &safe)) {
+            list_del(node);
+            q_release_element(list_entry(node, element_t, list));
             dup = true;
         } else if (dup) {
-            list_move(&entry->list, del_list);
+            list_del(node);
+            q_release_element(list_entry(node, element_t, list));
             dup = false;
         }
     }
-    q_free(del_list);
 
     return true;
 }
@@ -243,41 +253,61 @@ void q_reverseK(struct list_head *head, int k)
     list_splice_init(&tmp, head);
 }
 
-static inline int cmpstr(const void *p1, const void *p2)
+struct list_head *merge_two_lists(struct list_head *L1, struct list_head *L2)
 {
-    return strcmp(*(const char **) p1, *(const char **) p2);
+    struct list_head *head = NULL, **ptr = &head, **node;
+    for (node = NULL; L1 && L2; *node = (*node)->next) {
+        if (cmpstr(&L1, &L2) < 0)
+            node = &L1;
+        else
+            node = &L2;
+        *ptr = *node;
+        ptr = &(*ptr)->next;
+    }
+
+    *ptr = (struct list_head *) ((uintptr_t) L1 | (uintptr_t) L2);
+    return head;
+}
+
+struct list_head *merge_sort(struct list_head *list)
+{
+    if (!list || !list->next) {
+        return list;
+    }
+
+    LIST_HEAD(head);
+    head.next = list;
+
+    struct list_head *slow = NULL, *mid = NULL;
+    _find_mid(&slow, &head);
+    mid = slow->next;
+    slow->next = NULL;
+
+    struct list_head *left = merge_sort(list);
+    struct list_head *right = merge_sort(mid);
+    return merge_two_lists(left, right);
 }
 
 /* Sort elements of queue in ascending order */
 void q_sort(struct list_head *head)
 {
-    struct list_head list_less, list_greater;
-    element_t *pivot;
-    element_t *item, *safe;
-
-    if (list_empty(head) || list_is_singular(head)) {
+    if (!head || list_empty(head) || list_is_singular(head)) {
         return;
     }
 
-    INIT_LIST_HEAD(&list_less);
-    INIT_LIST_HEAD(&list_greater);
+    head->prev->next = NULL;
+    head->prev = NULL;
+    head->next = merge_sort(head->next);
 
-    pivot = list_first_entry(head, element_t, list);
-    list_del(&pivot->list);
-
-    list_for_each_entry_safe (item, safe, head, list) {
-        if (cmpstr(&item->value, &pivot->value) < 0)
-            list_move_tail(&item->list, &list_less);
-        else
-            list_move_tail(&item->list, &list_greater);
+    struct list_head *prev = head, *cur = head->next;
+    while (cur != NULL) {
+        cur->prev = prev;
+        cur = cur->next;
+        prev = prev->next;
     }
 
-    q_sort(&list_less);
-    q_sort(&list_greater);
-
-    list_add(&pivot->list, head);
-    list_splice(&list_less, head);
-    list_splice_tail(&list_greater, head);
+    prev->next = head;
+    head->prev = prev;
 }
 
 /* Remove every node which has a node with a strictly greater value anywhere to
@@ -294,11 +324,9 @@ int q_descend(struct list_head *head)
     }
 
     struct list_head *node, *safe;
-
     list_for_each_safe (node, safe, head) {
-        element_t *pentry = list_entry(node->prev, element_t, list);
-        element_t *entry = list_entry(node, element_t, list);
-        if (&pentry->list != head && strcmp(pentry->value, entry->value) < 0) {
+        if (node->prev != head && cmpstr(&node->prev, &node) < 0) {
+            element_t *entry = list_entry(node, element_t, list);
             list_del(node);
             q_release_element(entry);
         }
@@ -311,5 +339,32 @@ int q_descend(struct list_head *head)
 int q_merge(struct list_head *head)
 {
     // https://leetcode.com/problems/merge-k-sorted-lists/
-    return 0;
+    if (!head || list_empty(head)) {
+        return 0;
+    }
+
+    if (list_is_singular(head)) {
+        return list_first_entry(head, queue_contex_t, chain)->size;
+    }
+
+    queue_contex_t *main_qhead = list_first_entry(head, queue_contex_t, chain);
+    list_del_init(&main_qhead->chain);
+    queue_contex_t *cur_qhead = NULL;
+
+    list_for_each_entry (cur_qhead, head, chain) {
+        list_splice_init(cur_qhead->q->next, main_qhead->q);
+        main_qhead->size += cur_qhead->size;
+        main_qhead->q->next = merge_sort(main_qhead->q->next);
+        struct list_head *prev = main_qhead->q, *cur = main_qhead->q->next;
+        while (cur != NULL) {
+            cur->prev = prev;
+            cur = cur->next;
+            prev = prev->next;
+        }
+        prev->next = main_qhead->q;
+        main_qhead->q->prev = prev;
+    }
+
+    list_add(&main_qhead->chain, head);
+    return main_qhead->size;
 }
