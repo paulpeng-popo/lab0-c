@@ -57,6 +57,7 @@ bool q_insert_head(struct list_head *head, char *s)
 
     strncpy(entry->value, s, len);
     (entry->value)[len - 1] = '\0';
+
     list_add(&entry->list, head);
 
     return true;
@@ -83,6 +84,7 @@ bool q_insert_tail(struct list_head *head, char *s)
 
     strncpy(entry->value, s, len);
     (entry->value)[len - 1] = '\0';
+
     list_add_tail(&entry->list, head);
 
     return true;
@@ -323,10 +325,16 @@ int q_descend(struct list_head *head)
         return 1;
     }
 
-    struct list_head *node, *safe;
-    list_for_each_safe (node, safe, head) {
-        if (node->prev != head && cmpstr(&node->prev, &node) < 0) {
-            element_t *entry = list_entry(node, element_t, list);
+    struct list_head *node = head->prev;
+    struct list_head *pnode = node->prev;
+    char *max = NULL;
+
+    for (; node != head; node = pnode) {
+        element_t *entry = list_entry(node, element_t, list);
+        pnode = node->prev;
+        if (!max || strcmp(entry->value, max) > 0) {
+            max = entry->value;
+        } else {
             list_del(node);
             q_release_element(entry);
         }
@@ -347,24 +355,17 @@ int q_merge(struct list_head *head)
         return list_first_entry(head, queue_contex_t, chain)->size;
     }
 
-    queue_contex_t *main_qhead = list_first_entry(head, queue_contex_t, chain);
-    list_del_init(&main_qhead->chain);
-    queue_contex_t *cur_qhead = NULL;
+    queue_contex_t *qhead = list_first_entry(head, queue_contex_t, chain);
+    list_del_init(&qhead->chain);
+    queue_contex_t *cur = NULL;
 
-    list_for_each_entry (cur_qhead, head, chain) {
-        list_splice_init(cur_qhead->q->next, main_qhead->q);
-        main_qhead->size += cur_qhead->size;
-        main_qhead->q->next = merge_sort(main_qhead->q->next);
-        struct list_head *prev = main_qhead->q, *cur = main_qhead->q->next;
-        while (cur != NULL) {
-            cur->prev = prev;
-            cur = cur->next;
-            prev = prev->next;
-        }
-        prev->next = main_qhead->q;
-        main_qhead->q->prev = prev;
+    list_for_each_entry (cur, head, chain) {
+        list_splice_init(cur->q, qhead->q);
+        qhead->size += cur->size;
     }
 
-    list_add(&main_qhead->chain, head);
-    return main_qhead->size;
+    list_add(&qhead->chain, head);
+    q_sort(qhead->q);
+
+    return qhead->size;
 }
