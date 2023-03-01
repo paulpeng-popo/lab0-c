@@ -36,9 +36,9 @@ void q_free(struct list_head *l)
     free(l);
 }
 
-static inline bool q_insert(struct list_head *head,
-                            char *s,
-                            void (*op)(struct list_head *, struct list_head *))
+bool q_insert(struct list_head *head,
+              char *s,
+              void (*op)(struct list_head *, struct list_head *))
 {
     if (!head || !s) {
         return false;
